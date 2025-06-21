@@ -33,6 +33,8 @@ namespace BackEnd_FLOWER_SHOP.Services
         public async Task<ProductResponseDto> CreateProductAsync(ProductCreateDto productDto)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
+            // keep track of uploaded images so we can clean them up on failure
+            var uploadedResults = new List<(string Url, string PublicId)>();
             try
             {
                 // Validate categories exist
@@ -69,6 +71,7 @@ namespace BackEnd_FLOWER_SHOP.Services
                 if (productDto.Images?.Any() == true)
                 {
                     var uploadResults = await _cloudinaryService.UploadMultipleImagesAsync(productDto.Images);
+                    uploadedResults = uploadResults.ToList();
 
                     foreach (var (url, publicId) in uploadResults)
                     {
@@ -131,12 +134,11 @@ namespace BackEnd_FLOWER_SHOP.Services
                 _logger.LogError(ex, $"Error creating product: {productDto.Name}");
 
                 // Clean up uploaded images if product creation fails
-                if (productDto.Images?.Any() == true)
+                if (uploadedResults.Any())
                 {
                     try
                     {
-                        var uploadResults = await _cloudinaryService.UploadMultipleImagesAsync(productDto.Images);
-                        foreach (var (_, publicId) in uploadResults)
+                        foreach (var (_, publicId) in uploadedResults)
                         {
                             await _cloudinaryService.DeleteImageAsync(publicId);
                         }
